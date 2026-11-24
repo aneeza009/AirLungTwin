@@ -68,6 +68,15 @@ def build_dataset(profile_key: str = patient_twin.DEFAULT_PROFILE,
         except Exception as e:
             print("[data_loader] forecast skipped:", e)
 
+    # Blend forecasts: PM2.5 ahead comes from OUR CNN-1D model; the other gases
+    # (PM10, NO2, O3, SO2) come from the Open-Meteo forecast. Together they form the
+    # patient's combined-exposure forecast. (If the CNN is unavailable, PM2.5 stays
+    # from Open-Meteo so nothing breaks.)
+    if len(meteo_fcst) and len(model_fcst):
+        cnn = model_fcst.set_index("timestamp")["pm25"]
+        meteo_fcst = meteo_fcst.copy()
+        meteo_fcst["pm25"] = [cnn.get(t, v) for t, v in zip(meteo_fcst["timestamp"], meteo_fcst["pm25"])]
+
     # 3) real lung baseline
     nh = load_nhanes_baseline()
 

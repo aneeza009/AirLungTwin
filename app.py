@@ -77,8 +77,10 @@ app.layout = html.Div([
                       html.Span(f" · {AQI_CAT}", className="airpill-cat")]),
             html.Div(SRC_LINE, className="airpill-src")])),
         dbc.Col(md=3, children=[html.Div("Viewing patient", className="hero-label"),
-                                dcc.Dropdown(id="profile", options=PROFILE_OPTIONS, value=DATA["profile_key"],
-                                             clearable=False, className="profile-dd")]),
+                                html.Div(className="dd-wrap", children=[
+                                    html.Div(id="sel-patient", className="sel-patient"),
+                                    dcc.Dropdown(id="profile", options=PROFILE_OPTIONS, value=DATA["profile_key"],
+                                                 clearable=False, searchable=False, className="profile-dd")])]),
     ]))),
 
     dbc.Container(fluid=True, className="body", children=[
@@ -148,10 +150,11 @@ app.layout = html.Div([
                 html.Div(id="trend-cap", className="cap")]))),
         ]),
 
-        html.Div("Air is live (Open-Meteo, all pollutants). Patient vitals are model estimates on a real "
-                 "NHANES lung baseline — peak flow and risk level are the modelled outputs, SpO₂ is an "
-                 "indicator — replaced by real ESP32 readings next phase. Forecast uses a CNN-1D model.",
-                 className="footnote"),
+        html.Div("Air is live (Open-Meteo, all pollutants). The PM2.5 forecast is made by our CNN-1D model; "
+                 "the other gases (PM10, NO₂, O₃, SO₂) use the Open-Meteo forecast — together they form the "
+                 "patient's combined exposure ahead. Patient vitals are model estimates on a real NHANES "
+                 "lung baseline (peak flow and risk are the modelled outputs; SpO₂ is an indicator), replaced "
+                 "by real ESP32 readings next phase.", className="footnote"),
     ]),
 ])
 
@@ -163,6 +166,7 @@ def _fig(fig, h=300):
 
 
 @callback(
+    Output("sel-patient", "children"),
     Output("status-hero", "children"), Output("status-hero", "style"),
     Output("m-spo2", "children"), Output("m-pef", "children"), Output("m-base", "children"),
     Output("insights", "children"), Output("fusion", "figure"), Output("fusion-cap", "children"),
@@ -249,7 +253,7 @@ def update_patient(profile_key):
     dont_list = [html.Div(className="dd-item", children=[
         html.I(className="bi bi-x-circle-fill dd-no"), html.Span(t)]) for t in dont]
 
-    return (hero, hero_style, spo2, pef, base, ins, _fig(fig), cap, comp,
+    return (p["profile_name"], hero, hero_style, spo2, pef, base, ins, _fig(fig), cap, comp,
             blocks, labels, bf, do_list, dont_list)
 
 
@@ -273,9 +277,18 @@ app.index_string = """
  .airpill-cat{font-size:1rem;color:#e8eef5;}.airpill-src{font-size:.72rem;color:#9fb6cc;margin-top:2px;}
  /* dropdown: force the selected value to be visible on the dark hero */
  .profile-dd .Select-control{background:#fff;border-radius:8px;}
- .profile-dd .Select-value-label,.profile-dd .Select-value,.profile-dd .Select-placeholder,
- .profile-dd .Select-input>input{color:#1f2d3d !important;}
- .profile-dd .Select--single>.Select-control .Select-value{color:#1f2d3d !important;}
+ .profile-dd.Select,.profile-dd .Select,.profile-dd .Select-control,.profile-dd .Select-value,
+ .profile-dd .Select-value-label,.profile-dd .Select-placeholder,.profile-dd .Select-input>input,
+ .profile-dd .has-value.Select--single>.Select-control .Select-value .Select-value-label,
+ .profile-dd .has-value.is-pseudo-focused.Select--single>.Select-control .Select-value .Select-value-label{
+   color:#1f2d3d !important;}
+ .profile-dd .Select-control .Select-value{line-height:36px !important;}
+ .profile-dd .Select__single-value,.profile-dd .Select__placeholder{color:#1f2d3d !important;}
+ /* reliable overlay: show the selected patient name inside the bar */
+ .dd-wrap{position:relative;}
+ .sel-patient{position:absolute;left:14px;top:0;height:38px;line-height:38px;color:#1f2d3d;
+   font-weight:600;font-size:.95rem;pointer-events:none;z-index:5;white-space:nowrap;
+   max-width:calc(100% - 44px);overflow:hidden;text-overflow:ellipsis;}
  .body{max-width:1250px;}
  .status-hero{border-radius:14px;padding:18px 24px;background:#fff;}
  .sh-cap{font-size:.72rem;letter-spacing:1px;font-weight:700;opacity:.8;}
