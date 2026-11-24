@@ -114,6 +114,49 @@ def simulate(air_history: pd.DataFrame, profile_key: str, nhanes_fev1_fvc: float
     }
 
 
+def forecast_response(air_forecast: pd.DataFrame, profile_key: str) -> pd.DataFrame:
+    """Feed the AQI FORECAST through the patient model -> forecast the patient's
+    breathing (SpO2, peak flow) and hourly status for the hours ahead.
+    This is 'predict the patient, not just the air'. Returns empty df if no forecast."""
+    if air_forecast is None or len(air_forecast) == 0:
+        return pd.DataFrame(columns=["timestamp", "pm25", "spo2", "pef_pct", "status", "color"])
+    sev = PROFILES[profile_key]["severity"]
+    r = respond(air_forecast["pm25"].to_numpy(), profile_key)
+    out = air_forecast[["timestamp", "pm25"]].copy()
+    out["spo2"], out["pef_pct"] = r["spo2"], r["pef_pct"]
+    rows = [risk_and_advice(pm, pf, sp, sev)
+            for pm, pf, sp in zip(out["pm25"], out["pef_pct"], out["spo2"])]
+    out["status"] = [x[0] for x in rows]
+    out["color"] = [x[1] for x in rows]
+    return out.reset_index(drop=True)
+
+
+def dos_and_donts(status: str, obstruction: bool):
+    """Patient-tailored advice lists (icon, text). Different per risk level."""
+    base = {
+        "STABLE": (
+            [("🌳", "Normal outdoor activity is fine"), ("🚶", "A walk or light exercise is OK"),
+             ("💧", "Stay hydrated as usual")],
+            [("🚭", "Still avoid smoke and bonfires")]),
+        "WATCH": (
+            [("🩺", "Keep your reliever inhaler with you"), ("⏱️", "Keep outdoor trips short"),
+             ("😷", "A mask helps on busy roads")],
+            [("🏃", "Avoid hard exercise outdoors"), ("🪟", "Don't keep windows open for long")]),
+        "ELEVATED": (
+            [("🏠", "Stay indoors where you can"), ("🪟", "Keep windows closed"),
+             ("🩺", "Keep the inhaler within reach")],
+            [("🚶", "Avoid going outside"), ("🏃", "No outdoor exertion")]),
+        "HIGH RISK": (
+            [("🏠", "Stay indoors"), ("🌀", "Run an air purifier if you have one"),
+             ("😷", "Wear an N95 mask if you must go out"), ("🩺", "Monitor symptoms closely")],
+            [("🚪", "Do not go outside"), ("🏃", "No physical exertion"), ("🪟", "Do not open windows")]),
+    }
+    do, dont = base.get(status, base["STABLE"])
+    if obstruction:
+        do = do + [("💊", "Follow your prescribed controller medication")]
+    return do, dont
+
+
 if __name__ == "__main__":
     # quick self-test: same air, three patients -> different responses
     air = pd.DataFrame({"timestamp": pd.date_range("2026-11-24", periods=5, freq="h"),
