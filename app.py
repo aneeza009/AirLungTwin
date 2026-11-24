@@ -1,15 +1,16 @@
 """
-app.py — AirLung Twin dashboard (clean, light, layperson-readable)
-==================================================================
-Environment twin (live Open-Meteo air + Khazina's CNN-1D forecast)
-      +  Patient twin (profile + real NHANES baseline + air-driven response)
-      =  a personal answer: "given THIS air, should THIS patient go outside?"
+app.py — AirLung Twin dashboard  (professional, patient-readable)
+=================================================================
+Environment twin (live Open-Meteo air + CNN-1D forecast)
+   + Patient twin (profile + real NHANES baseline + air-driven response)
+   = a PERSONAL answer: "given THIS air, should THIS patient go outside?"
 
-Built with Dash Bootstrap Components on a light theme for a professional look.
-Pick a patient profile (healthy / mild / moderate asthma) to see how the SAME
-Lahore air affects DIFFERENT patients — that contrast is the project's novelty.
-
-Run:  pip install -r requirements.txt   then   python app.py  -> http://127.0.0.1:8050
+Design goals addressed this version:
+  - depth & contrast (dark hero, soft background, shadowed cards) — not flat white
+  - plain-language labels with a one-line explanation on every metric
+  - the SAME air gives DIFFERENT advice per patient profile (the novelty, made visible)
+  - "public AQI site vs AirLung Twin" framing: the tailored side is the hero
+  - uniform card heights, pollutant names spelled out for a layperson
 """
 import plotly.graph_objects as go
 import dash_bootstrap_components as dbc
@@ -18,203 +19,252 @@ from dash import Dash, html, dcc, callback, Output, Input
 import patient_twin
 from data_loader import build_dataset
 
-DATA = build_dataset()                     # one call: live air + forecast + baseline
+DATA = build_dataset()
 AIR = DATA["air_history"]
 NHANES_FEV1FVC = DATA["nhanes"]["fev1_fvc"]
 
-# --- air "now" (profile-independent) ---
 PM25_NOW = round(float(AIR["pm25"].iloc[-1]), 0)
 AQI_NOW = DATA["city_aqi"]
 AQI_CAT = DATA["city_aqi_cat"]
 MODE = "LIVE" if DATA["is_live"] else "RECENT"
-SRC_LINE = f'{DATA["aq_source"]} · latest {DATA["aq_latest_time"]:%d %b %H:%M}'
+SRC_LINE = f'{DATA["aq_source"]} · updated {DATA["aq_latest_time"]:%d %b %H:%M}'
 
-AQI_COLORS = {"Good": "#2E933C", "Moderate": "#F0A202",
-              "Unhealthy (Sensitive)": "#F46036", "Unhealthy": "#D7263D",
+AQI_COLORS = {"Good": "#2E933C", "Moderate": "#C9A227",
+              "Unhealthy (Sensitive)": "#E07B39", "Unhealthy": "#D7263D",
               "Very Unhealthy": "#8E44AD", "Hazardous": "#6B0F1A"}
 AQI_COLOR = AQI_COLORS.get(AQI_CAT, "#555")
-
 PROFILE_OPTIONS = [{"label": v["name"], "value": k} for k, v in patient_twin.PROFILES.items()]
 
+POLLUTANTS = {
+    "pm25": ("Particulate matter (PM2.5)", "fine particles that reach deep into the lungs"),
+    "pm10": ("Particulate matter (PM10)", "coarser dust particles you breathe in"),
+    "no2": ("Nitrogen dioxide (NO₂)", "a gas mostly from vehicle traffic"),
+    "o3": ("Ozone (O₃)", "an irritant gas that builds up in sunlight"),
+    "so2": ("Sulphur dioxide (SO₂)", "a gas from burning fuels and industry"),
+}
 
-def stat(title, value, caption, color="#2c3e50"):
-    return dbc.Card(dbc.CardBody([
-        html.Div(title, className="text-muted small text-uppercase fw-bold"),
-        html.Div(value, style={"fontSize": "2rem", "fontWeight": "800", "color": color}),
-        html.Div(caption, className="text-muted small"),
-    ]), className="shadow-sm h-100")
 
-
-def caption(txt):
-    return html.Div("What this shows: " + txt, className="text-muted small fst-italic mt-1")
+def metric(label, value, help_text, color):
+    """Uniform KPI tile with an accent bar, a plain label and a one-line explanation."""
+    return dbc.Card(className="metric h-100 shadow-sm", children=[
+        html.Div(className="metric-bar", style={"background": color}),
+        dbc.CardBody([
+            html.Div(label, className="metric-label"),
+            html.Div(value, className="metric-value", style={"color": color}),
+            html.Div(help_text, className="metric-help"),
+        ])])
 
 
 app = Dash(__name__, external_stylesheets=[dbc.themes.FLATLY])
 app.title = "AirLung Twin"
 
-app.layout = dbc.Container(fluid=True, className="py-3", children=[
-    # header
-    dbc.Row(align="center", className="mb-3", children=[
-        dbc.Col([html.H3("AirLung Twin", className="fw-bold mb-0"),
-                 html.Div("A respiratory digital twin — how live air affects one patient",
-                          className="text-muted small")], md=6),
-        dbc.Col(md=3, children=dbc.Card(dbc.CardBody([
-            html.Div("AIR DATA", className="small text-muted fw-bold"),
-            dbc.Badge(MODE, color="success" if MODE == "LIVE" else "secondary", className="me-1"),
-            html.Div(SRC_LINE, className="small text-muted mt-1")]), className="shadow-sm")),
+app.layout = html.Div([
+    # ---------- dark hero ----------
+    html.Div(className="hero", children=dbc.Container(fluid=True, children=dbc.Row(align="center", children=[
+        dbc.Col(md=5, children=[
+            html.Div("AirLung Twin", className="hero-title"),
+            html.Div("How Lahore's live air affects one patient's breathing", className="hero-sub")]),
+        dbc.Col(md=4, children=html.Div(className="airpill", children=[
+            html.Div([dbc.Badge(MODE, color="danger" if MODE == "LIVE" else "secondary", className="me-2"),
+                      html.Span("AIR QUALITY (LIVE)", className="airpill-cap")]),
+            html.Div([html.Span(f"AQI {AQI_NOW:.0f}", className="airpill-aqi", style={"color": AQI_COLOR}),
+                      html.Span(f" · {AQI_CAT}", className="airpill-cat")]),
+            html.Div(SRC_LINE, className="airpill-src")])),
         dbc.Col(md=3, children=[
-            html.Div("Patient profile", className="small text-muted fw-bold"),
-            dcc.Dropdown(id="profile", options=PROFILE_OPTIONS,
-                         value=DATA["profile_key"], clearable=False)]),
-    ]),
+            html.Div("Patient", className="hero-label"),
+            dcc.Dropdown(id="profile", options=PROFILE_OPTIONS, value=DATA["profile_key"],
+                         clearable=False, className="profile-dd")]),
+    ]))),
 
-    # BIG answer
-    dbc.Row(className="mb-3", children=dbc.Col(dbc.Card(dbc.CardBody([
-        dbc.Row(align="center", children=[
-            dbc.Col(md=5, children=[
-                html.Div("CURRENT STATUS FOR THIS PATIENT", className="small text-muted fw-bold"),
-                html.Div(id="status-text", style={"fontSize": "2rem", "fontWeight": "800"})]),
-            dbc.Col(md=7, children=[
-                html.Div("Should this patient go outside right now?",
-                         className="small text-muted fw-bold"),
-                html.Div(id="advice-text", style={"fontSize": "1.25rem", "fontWeight": "700"})]),
+    dbc.Container(fluid=True, className="body", children=[
+        # ---------- status hero ----------
+        html.Div(id="status-hero", className="status-hero shadow-sm"),
+
+        # ---------- metrics ----------
+        dbc.Row(className="g-3 mt-1", children=[
+            dbc.Col(md=3, children=metric(
+                "Particulate matter (PM2.5)", f"{PM25_NOW:.0f} µg/m³",
+                "fine particles in the air right now · same for everyone", AQI_COLOR)),
+            dbc.Col(md=3, children=html.Div(id="m-spo2")),
+            dbc.Col(md=3, children=html.Div(id="m-pef")),
+            dbc.Col(md=3, children=html.Div(id="m-base")),
         ]),
-    ]), id="status-card", className="shadow-sm"))),
 
-    # KPI row
-    dbc.Row(className="g-3 mb-3", children=[
-        dbc.Col(md=3, children=stat("PM2.5 now", f"{PM25_NOW:.0f} µg/m³",
-                                    f"Air Quality Index {AQI_NOW:.0f} · {AQI_CAT}", AQI_COLOR)),
-        dbc.Col(md=3, children=html.Div(id="kpi-spo2")),
-        dbc.Col(md=3, children=html.Div(id="kpi-pef")),
-        dbc.Col(md=3, children=html.Div(id="kpi-baseline")),
+        # ---------- what this means ----------
+        dbc.Card(className="panel shadow-sm mt-3", children=dbc.CardBody([
+            html.Div("What this means for this patient", className="panel-title"),
+            html.Div(id="insights")])),
+
+        # ---------- charts ----------
+        dbc.Row(className="g-3 mt-1", children=[
+            dbc.Col(md=6, children=dbc.Card(className="panel h-100 shadow-sm", children=dbc.CardBody([
+                html.Div("How the air is affecting this patient's breathing", className="panel-title"),
+                dcc.Graph(id="fusion", config={"displayModeBar": False}),
+                html.Div(id="fusion-cap", className="cap")]))),
+            dbc.Col(md=6, children=dbc.Card(className="panel h-100 shadow-sm", children=dbc.CardBody([
+                html.Div("Air quality forecast — next hours", className="panel-title"),
+                dcc.Graph(id="forecast", config={"displayModeBar": False}),
+                html.Div("Solid line = recent live PM2.5. Dashed line = our deep-learning "
+                         "(CNN-1D) forecast for the coming hours.", className="cap")])))]),
+
+        # ---------- comparison + explorer ----------
+        dbc.Row(className="g-3 mt-1", children=[
+            dbc.Col(md=6, children=dbc.Card(className="panel h-100 shadow-sm", children=dbc.CardBody([
+                html.Div("A public AQI site  vs  AirLung Twin", className="panel-title"),
+                html.Div(id="comparison"),
+                html.Div("A public site gives one number and the same advice to the whole city. "
+                         "AirLung Twin turns that same air into advice for THIS patient.",
+                         className="cap")]))),
+            dbc.Col(md=6, children=dbc.Card(className="panel h-100 shadow-sm", children=dbc.CardBody([
+                html.Div("Explore each pollutant", className="panel-title"),
+                dcc.Dropdown(id="signal", clearable=False, value="pm25", className="mb-2",
+                             options=[{"label": v[0], "value": k} for k, v in POLLUTANTS.items()],
+                             style={"maxWidth": "320px"}),
+                dcc.Graph(id="trend", config={"displayModeBar": False}),
+                html.Div(id="trend-cap", className="cap")])))]),
+
+        html.Div("Air is live (Open-Meteo). Patient vitals are model-predicted (simulated) on a "
+                 "real NHANES lung baseline, and are replaced by real ESP32 sensor readings in the "
+                 "next phase. The forecast uses a CNN-1D deep-learning model.",
+                 className="footnote"),
     ]),
-
-    # insights
-    dbc.Row(className="mb-3", children=dbc.Col(dbc.Card(dbc.CardBody([
-        html.H6("What this means", className="fw-bold"),
-        html.Div(id="insights")]), className="shadow-sm"))),
-
-    # charts
-    dbc.Row(className="g-3 mb-3", children=[
-        dbc.Col(md=6, children=dbc.Card(dbc.CardBody([
-            html.H6("Air vs this patient's predicted breathing", className="fw-bold"),
-            dcc.Graph(id="fusion", config={"displayModeBar": False}),
-            caption("as PM2.5 (orange) rises, the twin predicts this patient's "
-                    "oxygen / SpO₂ (blue) drops. The link is defined by the patient model.")]),
-            className="shadow-sm")),
-        dbc.Col(md=6, children=dbc.Card(dbc.CardBody([
-            html.H6("Air quality forecast (next hours)", className="fw-bold"),
-            dcc.Graph(id="forecast", config={"displayModeBar": False}),
-            caption("recent live PM2.5 (solid) and the predicted next hours "
-                    f"({DATA['model_metrics'].get('model','forecast')}).")]),
-            className="shadow-sm")),
-    ]),
-
-    # comparison + explore
-    dbc.Row(className="g-3 mb-3", children=[
-        dbc.Col(md=6, children=dbc.Card(dbc.CardBody([
-            html.H6("Generic city AQI  vs  this patient", className="fw-bold"),
-            html.Div(id="comparison"),
-            caption("a public AQI site gives one city number for everyone; the twin "
-                    "turns the same air into advice for THIS patient.")]), className="shadow-sm")),
-        dbc.Col(md=6, children=dbc.Card(dbc.CardBody([
-            html.H6("Explore any pollutant", className="fw-bold"),
-            dcc.Dropdown(id="signal", clearable=False, value="pm25", options=[
-                {"label": "PM2.5", "value": "pm25"}, {"label": "PM10", "value": "pm10"},
-                {"label": "NO₂", "value": "no2"}, {"label": "Ozone", "value": "o3"},
-                {"label": "SO₂", "value": "so2"}], style={"maxWidth": "260px"}),
-            dcc.Graph(id="trend", config={"displayModeBar": False}),
-            caption("the live Lahore trend for the chosen pollutant.")]), className="shadow-sm")),
-    ]),
-
-    html.Div("Patient vitals are MODEL-PREDICTED (simulated), grounded in a real NHANES "
-             "lung baseline; they are replaced by real ESP32 sensor readings in the next "
-             "phase. Air is live (Open-Meteo). Forecast replicates Khazina Naveed's CNN-1D.",
-             className="text-muted small fst-italic"),
 ])
 
 
-# ---------- patient-dependent callback ----------
+def _fig(fig, h=300):
+    fig.update_layout(template="plotly_white", height=h, margin=dict(l=55, r=55, t=10, b=35),
+                      font=dict(color="#2c3e50"))
+    return fig
+
+
+# ---------------- patient-dependent ----------------
 @callback(
-    Output("status-text", "children"), Output("status-text", "style"),
-    Output("advice-text", "children"), Output("advice-text", "style"),
-    Output("status-card", "style"),
-    Output("kpi-spo2", "children"), Output("kpi-pef", "children"),
-    Output("kpi-baseline", "children"), Output("insights", "children"),
-    Output("fusion", "figure"), Output("comparison", "children"),
+    Output("status-hero", "children"), Output("status-hero", "style"),
+    Output("m-spo2", "children"), Output("m-pef", "children"), Output("m-base", "children"),
+    Output("insights", "children"), Output("fusion", "figure"), Output("fusion-cap", "children"),
+    Output("comparison", "children"),
     Input("profile", "value"))
 def update_patient(profile_key):
     p = patient_twin.simulate(AIR, profile_key, NHANES_FEV1FVC)
     col = p["status_color"]
-    s_style = {"fontSize": "2rem", "fontWeight": "800", "color": col}
-    a_style = {"fontSize": "1.25rem", "fontWeight": "700", "color": col}
-    card_style = {"borderLeft": f"8px solid {col}"}
 
-    spo2 = stat("Predicted SpO₂", f"{p['spo2_now']:.1f}%", "oxygen for this patient (modelled)", col)
-    pef = stat("Predicted peak flow", f"{p['pef_pct_now']:.0f}%", "of this patient's personal best", col)
-    base = stat("FEV1/FVC baseline", f"{p['baseline_fev1_fvc']:.0f}%",
-                ("obstructed (<70%)" if p["obstruction"] else "normal range") + " · NHANES anchor",
-                "#6C5CE7")
+    hero = dbc.Row(align="center", children=[
+        dbc.Col(md=5, children=[
+            html.Div(f"AIRLUNG TWIN · {p['profile_name'].upper()}", className="sh-cap"),
+            html.Div(p["status"], className="sh-status")]),
+        dbc.Col(md=7, children=[
+            html.Div("Should this patient go outside right now?", className="sh-q"),
+            html.Div(p["advice"], className="sh-advice")])])
+    hero_style = {"background": col + "14", "borderLeft": f"10px solid {col}", "color": col}
 
-    ins = [
-        html.Div(f"• Air is {AQI_CAT} (PM2.5 {PM25_NOW:.0f} µg/m³, AQI {AQI_NOW:.0f}).", style={"color": AQI_COLOR}),
-        html.Div(f"• For {p['profile_name']}, the twin predicts SpO₂ ≈ {p['spo2_now']:.1f}% and "
-                 f"peak flow ≈ {p['pef_pct_now']:.0f}% of personal best right now.", style={"color": col}),
-        html.Div(f"• Lung baseline FEV1/FVC = {p['baseline_fev1_fvc']:.0f}% "
-                 f"({'obstructed' if p['obstruction'] else 'normal'}), the anchor the response is judged against.",
-                 style={"color": "#6C5CE7"}),
-        html.Div(f"• Verdict: {p['advice']}", style={"color": col, "fontWeight": "600"}),
-    ]
+    spo2 = metric("Blood oxygen (SpO₂)", f"{p['spo2_now']:.0f}%",
+                  "how well-oxygenated the blood is · 95–100% is normal", col)
+    pef = metric("Breathing strength (peak flow)", f"{p['pef_pct_now']:.0f}%",
+                 "how forcefully they can breathe out, vs their personal best", col)
+    base = metric("Lung baseline (FEV1/FVC)", f"{p['baseline_fev1_fvc']:.0f}%",
+                  ("obstructed lungs (under 70%)" if p["obstruction"] else "normal lung function")
+                  + " · fixed from NHANES", "#6C5CE7")
+
+    ins = html.Ul(className="ins", children=[
+        html.Li(f"The air is {AQI_CAT} (PM2.5 {PM25_NOW:.0f} µg/m³, AQI {AQI_NOW:.0f}) — the same for everyone."),
+        html.Li([html.B(f"For {p['profile_name']}: "),
+                 f"blood oxygen is predicted at {p['spo2_now']:.0f}% and breathing strength at "
+                 f"{p['pef_pct_now']:.0f}% of their best right now."]),
+        html.Li(f"Their lungs start from a {p['baseline_fev1_fvc']:.0f}% baseline "
+                f"({'obstructed' if p['obstruction'] else 'normal'}), so the same air hits them "
+                f"{'harder' if p['obstruction'] else 'less hard'} than a healthy person."),
+        html.Li([html.B("Verdict: "), html.Span(p["advice"], style={"color": col})]),
+    ])
 
     ser = p["series"]
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=ser["timestamp"], y=ser["pm25"], name="PM2.5 (µg/m³)",
-                             line=dict(color="#F46036", width=2)))
-    fig.add_trace(go.Scatter(x=ser["timestamp"], y=ser["spo2"], name="SpO₂ (%)", yaxis="y2",
-                             line=dict(color="#2C7BE5", width=2)))
-    fig.update_layout(template="plotly_white", height=300, margin=dict(l=50, r=50, t=10, b=30),
-                      yaxis=dict(title="PM2.5"), yaxis2=dict(title="SpO₂ %", overlaying="y", side="right"),
-                      legend=dict(orientation="h", y=1.15))
+    fig.add_trace(go.Scatter(x=ser["timestamp"], y=ser["pm25"], name="Air pollution (PM2.5)",
+                             line=dict(color="#E07B39", width=2)))
+    fig.add_trace(go.Scatter(x=ser["timestamp"], y=ser["spo2"], name="This patient's blood oxygen",
+                             yaxis="y2", line=dict(color="#2C7BE5", width=2)))
+    fig.update_layout(yaxis=dict(title="PM2.5 µg/m³"), yaxis2=dict(title="SpO₂ %", overlaying="y", side="right"),
+                      legend=dict(orientation="h", y=1.18))
+    cap = ("Orange = particulate pollution (PM2.5), measured live. Blue = this patient's predicted "
+           "blood oxygen. When pollution rises, this patient's oxygen tends to fall.")
 
-    comp = dbc.Table([html.Tbody([
-        html.Tr([html.Td("Air number"), html.Td(f"City AQI {AQI_NOW:.0f} · {AQI_CAT}"),
-                 html.Td(f"PM2.5 {PM25_NOW:.0f} for this patient")]),
-        html.Tr([html.Td("Breathing"), html.Td("not considered"),
-                 html.Td(f"SpO₂ {p['spo2_now']:.0f}% · peak flow {p['pef_pct_now']:.0f}%")]),
-        html.Tr([html.Td("Advice"), html.Td("same for everyone"),
-                 html.Td(p["advice"], style={"color": col, "fontWeight": 600})]),
-    ])], bordered=True, size="sm", className="mb-0")
-    return (p["status"], s_style, p["advice"], a_style, card_style,
-            spo2, pef, base, ins, fig, comp)
+    comp = dbc.Row(className="g-2", children=[
+        dbc.Col(md=6, children=html.Div(className="cmp cmp-generic", children=[
+            html.Div("A PUBLIC AQI SITE", className="cmp-head"),
+            html.Div(f"AQI {AQI_NOW:.0f} · {AQI_CAT}", className="cmp-big"),
+            html.Div("Breathing: not considered", className="cmp-row"),
+            html.Div("Advice: same for the whole city", className="cmp-row")])),
+        dbc.Col(md=6, children=html.Div(className="cmp cmp-twin", style={"borderColor": col}, children=[
+            html.Div("AIRLUNG TWIN · THIS PATIENT", className="cmp-head", style={"color": col}),
+            html.Div(p["status"], className="cmp-big", style={"color": col}),
+            html.Div(f"Breathing: SpO₂ {p['spo2_now']:.0f}% · peak flow {p['pef_pct_now']:.0f}%", className="cmp-row"),
+            html.Div(f"Advice: {p['advice']}", className="cmp-row", style={"fontWeight": 600, "color": col})])),
+    ])
+    return hero, hero_style, spo2, pef, base, ins, _fig(fig), cap, comp
 
 
-# ---------- forecast chart (air only) ----------
+# ---------------- forecast (air only) ----------------
 @callback(Output("forecast", "figure"), Input("profile", "value"))
 def forecast_chart(_):
-    hist_tail = AIR.tail(48)
-    mf = DATA["model_forecast"]
+    tail, mf = AIR.tail(48), DATA["model_forecast"]
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=hist_tail["timestamp"], y=hist_tail["pm25"],
-                             name="recent (live)", line=dict(color="#2c3e50", width=2)))
+    fig.add_trace(go.Scatter(x=tail["timestamp"], y=tail["pm25"], name="recent (live)",
+                             line=dict(color="#2c3e50", width=2)))
     if len(mf):
         fig.add_trace(go.Scatter(x=mf["timestamp"], y=mf["pm25"], name="forecast",
-                                 line=dict(color="#F0A202", width=2, dash="dash")))
-    fig.update_layout(template="plotly_white", height=300, margin=dict(l=50, r=20, t=10, b=30),
-                      yaxis_title="PM2.5 (µg/m³)", legend=dict(orientation="h", y=1.15))
-    return fig
+                                 line=dict(color="#E07B39", width=2, dash="dash")))
+    fig.update_layout(yaxis_title="PM2.5 µg/m³", legend=dict(orientation="h", y=1.18))
+    return _fig(fig)
 
 
-# ---------- pollutant explorer (air only) ----------
-@callback(Output("trend", "figure"), Input("signal", "value"))
+# ---------------- pollutant explorer ----------------
+@callback(Output("trend", "figure"), Output("trend-cap", "children"), Input("signal", "value"))
 def trend(sig):
-    labels = {"pm25": "PM2.5", "pm10": "PM10", "no2": "NO₂", "o3": "Ozone", "so2": "SO₂"}
+    name, desc = POLLUTANTS[sig]
     fig = go.Figure(go.Scatter(x=AIR["timestamp"], y=AIR[sig], mode="lines",
                                line=dict(color="#2C7BE5", width=2)))
-    fig.update_layout(template="plotly_white", height=280, margin=dict(l=50, r=20, t=10, b=30),
-                      yaxis_title=f"{labels[sig]} (µg/m³)")
-    return fig
+    fig.update_layout(yaxis_title=f"{name} (µg/m³)")
+    return _fig(fig, 270), f"This is the live level of {name} in Lahore — {desc}."
 
+
+app.index_string = """
+<!DOCTYPE html><html><head>{%metas%}<title>{%title%}</title>{%favicon%}{%css%}
+<style>
+ body{background:#eceff5;}
+ .hero{background:linear-gradient(120deg,#0f2740,#17405f);color:#fff;padding:22px 8px;margin-bottom:18px;
+       box-shadow:0 4px 18px rgba(0,0,0,.18);}
+ .hero-title{font-size:1.9rem;font-weight:800;letter-spacing:.3px;}
+ .hero-sub{color:#aecbe6;font-size:.95rem;}
+ .hero-label{font-size:.7rem;color:#aecbe6;text-transform:uppercase;letter-spacing:1px;margin-bottom:3px;}
+ .airpill{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:10px 14px;}
+ .airpill-cap{font-size:.7rem;letter-spacing:1px;color:#cfe3f3;}
+ .airpill-aqi{font-size:1.5rem;font-weight:800;}
+ .airpill-cat{font-size:1rem;color:#e8eef5;}
+ .airpill-src{font-size:.72rem;color:#9fb6cc;margin-top:2px;}
+ .body{max-width:1250px;}
+ .status-hero{border-radius:14px;padding:18px 24px;background:#fff;}
+ .sh-cap{font-size:.72rem;letter-spacing:1px;font-weight:700;opacity:.8;}
+ .sh-status{font-size:2.1rem;font-weight:800;line-height:1.1;}
+ .sh-q{font-size:.8rem;font-weight:700;opacity:.75;text-transform:uppercase;letter-spacing:.5px;}
+ .sh-advice{font-size:1.35rem;font-weight:700;}
+ .metric{border:none;border-radius:12px;overflow:hidden;background:#fff;}
+ .metric-bar{height:5px;width:100%;}
+ .metric-label{font-size:.78rem;font-weight:700;color:#55617a;text-transform:uppercase;letter-spacing:.4px;}
+ .metric-value{font-size:1.9rem;font-weight:800;line-height:1.1;margin:2px 0;}
+ .metric-help{font-size:.76rem;color:#8a93a6;line-height:1.3;}
+ .panel{border:none;border-radius:14px;background:#fff;}
+ .panel-title{font-size:1rem;font-weight:700;color:#1f2d3d;margin-bottom:10px;}
+ .cap{font-size:.8rem;color:#7a8396;font-style:italic;margin-top:6px;line-height:1.4;}
+ .ins{margin:0;padding-left:1.1rem;} .ins li{margin:5px 0;color:#2c3e50;line-height:1.5;}
+ .cmp{border-radius:12px;padding:14px;height:100%;}
+ .cmp-generic{background:#f1f3f7;border:1px dashed #c4ccda;}
+ .cmp-twin{background:#fff;border:2px solid;}
+ .cmp-head{font-size:.72rem;font-weight:700;letter-spacing:.6px;color:#8a93a6;margin-bottom:6px;}
+ .cmp-big{font-size:1.5rem;font-weight:800;color:#55617a;}
+ .cmp-row{font-size:.86rem;color:#55617a;margin-top:4px;}
+ .footnote{font-size:.76rem;color:#8a93a6;font-style:italic;margin:18px 0 8px;line-height:1.5;}
+ .profile-dd .Select-control,.profile-dd .is-focused .Select-control{border-radius:8px;}
+</style></head><body>{%app_entry%}<footer>{%config%}{%scripts%}{%renderer%}</footer></body></html>
+"""
 
 if __name__ == "__main__":
     app.run(debug=True)

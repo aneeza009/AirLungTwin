@@ -73,15 +73,22 @@ def respond(pm25, profile_key: str):
     return {"pef": np.round(pef, 0), "pef_pct": np.round(pef_pct, 0), "spo2": np.round(spo2, 1)}
 
 
-def risk_and_advice(pm25: float, pef_pct: float, spo2: float):
-    """Combine air + predicted response into a status + plain go/no-go advice."""
-    if pef_pct < 60 or spo2 < 92 or pm25 > 250:
-        return "HIGH RISK", "#D7263D", "No — stay indoors, use inhaler/purifier, monitor closely."
-    if pef_pct < 75 or spo2 < 95 or pm25 > 150:
-        return "ELEVATED", "#F46036", "No — avoid going out; keep the inhaler close."
-    if pef_pct < 90 or pm25 > 55:
-        return "WATCH", "#F0A202", "Short trips only; limit outdoor exertion."
-    return "STABLE", "#2E933C", "Yes — safe for this patient to be outdoors."
+def risk_and_advice(pm25: float, pef_pct: float, spo2: float, severity: str):
+    """Combine air + predicted response into a status + plain go/no-go advice.
+
+    Thresholds depend on the patient: sensitive patients react at LOWER pollution,
+    which is why the SAME air gives different advice per profile (the novelty).
+    """
+    watch_pm, elev_pm, high_pm = {
+        "none": (120, 180, 260), "mild": (55, 120, 200), "moderate": (35, 90, 160),
+    }[severity]
+    if pef_pct < 60 or spo2 < 92 or pm25 > high_pm:
+        return "HIGH RISK", "#D7263D", "No — stay indoors, use inhaler + purifier, monitor closely."
+    if pef_pct < 75 or spo2 < 95 or pm25 > elev_pm:
+        return "ELEVATED", "#F46036", "No — avoid going outside; keep the inhaler close."
+    if pef_pct < 90 or pm25 > watch_pm:
+        return "WATCH", "#F0A202", "Short trips only — limit outdoor exertion."
+    return "STABLE", "#2E933C", "Yes — safe for this patient to be outside."
 
 
 def simulate(air_history: pd.DataFrame, profile_key: str, nhanes_fev1_fvc: float) -> dict:
@@ -94,7 +101,7 @@ def simulate(air_history: pd.DataFrame, profile_key: str, nhanes_fev1_fvc: float
     pm_now = float(air_history["pm25"].iloc[-1])
     spo2_now = float(r["spo2"][-1])
     pef_now = float(r["pef_pct"][-1])
-    status, color, advice = risk_and_advice(pm_now, pef_now, spo2_now)
+    status, color, advice = risk_and_advice(pm_now, pef_now, spo2_now, PROFILES[profile_key]["severity"])
     return {
         "series": out,                       # timestamp, pm25, spo2, pef_pct
         "profile_name": PROFILES[profile_key]["name"],
