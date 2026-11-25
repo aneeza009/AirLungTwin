@@ -108,7 +108,7 @@ def fig_pollutant_bar():
     vals = [float(last[k]) for k in lim]
     cols = ["#D7263D" if last[k] > lim[k] * 2 else "#E07B39" if last[k] > lim[k] else "#2E933C" for k in lim]
     f = go.Figure(go.Bar(x=names, y=vals, marker_color=cols, text=[f"{v:.0f}" for v in vals], textposition="outside"))
-    f.update_layout(yaxis_title="µg/m³  (green = safe, red = well above limit)")
+    f.update_layout(yaxis_title="µg/m³")
     return _fig(f, 320)
 
 
@@ -165,7 +165,7 @@ def tab_overview(p):
                                                   html.Div(p["status"], className="sh-status", style={"color": col})]),
                           dbc.Col(md=7, children=[html.Div("Should this patient go outside right now?", className="sh-q"),
                                                   html.Div(p["advice"], className="sh-advice", style={"color": col})])])))
-    metrics = dbc.Row(className="g-4 mt-1", children=[
+    metrics = dbc.Row(className="g-4", children=[
         dbc.Col(lg=3, md=6, children=metric("Particulate matter PM2.5", f"{PM25_NOW:.0f} µg/m³",
                                             "fine particles in the air right now — the same for everyone", AQI_COLOR)),
         dbc.Col(lg=3, md=6, children=metric("Blood oxygen (estimate)", f"{p['spo2_now']:.0f}%",
@@ -202,8 +202,8 @@ def tab_overview(p):
                          html.Div(f"Advice: {p['advice']}", className="cmp-row", style={"fontWeight": 600, "color": col})])),
                  ]),
                  sub="Public sites describe the air. AirLung Twin turns that same air into a decision for one person.")
-    return html.Div([status, metrics,
-                     dbc.Row(className="g-4 mt-1", children=[dbc.Col(lg=6, children=means), dbc.Col(lg=6, children=comp)])])
+    return html.Div(className="tabwrap", children=[status, metrics,
+                    dbc.Row(className="g-4", children=[dbc.Col(lg=6, children=means), dbc.Col(lg=6, children=comp)])])
 
 
 def tab_forecast(p, profile_key):
@@ -223,7 +223,8 @@ def tab_forecast(p, profile_key):
                  *[html.Div(className="dd-item", children=[html.I(className="bi bi-check-circle-fill dd-ok"), html.Span(t)]) for t in do])
     dont_c = panel([html.I(className="bi bi-x-circle me-2"), "What this patient should avoid"],
                    *[html.Div(className="dd-item", children=[html.I(className="bi bi-x-circle-fill dd-no"), html.Span(t)]) for t in dont])
-    return html.Div([tl, dbc.Row(className="g-4 mt-1", children=[dbc.Col(md=6, children=do_c), dbc.Col(md=6, children=dont_c)])])
+    return html.Div(className="tabwrap", children=[tl,
+                    dbc.Row(className="g-4", children=[dbc.Col(md=6, children=do_c), dbc.Col(md=6, children=dont_c)])])
 
 
 def tab_air():
@@ -233,7 +234,7 @@ def tab_air():
                     dcc.Graph(id="trend", config={"displayModeBar": False}),
                     html.Div(id="trend-cap", className="cap"),
                     sub="Lahore's air is a mix of several pollutants. Pick one to see its live level over the last week.")
-    return html.Div([
+    return html.Div(className="tabwrap", children=[
         dbc.Row(className="g-4", children=[
             dbc.Col(lg=6, children=panel("Current pollutant levels", dcc.Graph(figure=fig_pollutant_bar(), config={"displayModeBar": False}),
                                          cc("The main pollutants in the air right now, compared with their safe limits. "
@@ -244,7 +245,7 @@ def tab_air():
                                             "updates as the live air changes, so a different pollutant can lead at different times."),
                                          sub="How each pollutant contributes to the combined exposure.")),
         ]),
-        dbc.Row(className="g-4 mt-1", children=[
+        dbc.Row(className="g-4", children=[
             dbc.Col(lg=6, children=panel("Air quality forecast — next hours",
                                          dcc.Graph(figure=fig_air_forecast(), config={"displayModeBar": False}),
                                          cc([html.Span("Solid", style={"color": "#17405f", "fontWeight": 700}),
@@ -258,7 +259,7 @@ def tab_air():
 
 
 def tab_trends(p, profile_key):
-    return html.Div([
+    return html.Div(className="tabwrap", children=[
         panel(f"How the air affected this patient — last {HISTORY_DAYS} days",
               dcc.Graph(figure=fig_fusion(p), config={"displayModeBar": False}),
               cc([html.Span("Orange", style=ORANGE), " = measured particulate pollution (PM2.5). ",
@@ -284,7 +285,7 @@ def tab_about():
     table = dbc.Table([html.Thead(html.Tr([html.Th("What you see"), html.Th("Where it comes from"), html.Th("Type")])),
                        html.Tbody([html.Tr([html.Td(a), html.Td(b), html.Td(c)]) for a, b, c in rows])],
                       bordered=True, hover=True, className="about-table")
-    return html.Div([
+    return html.Div(className="tabwrap", children=[
         panel("What is AirLung Twin?",
               html.P("AirLung Twin is a digital twin of a respiratory patient. It takes Lahore's live air quality "
                      "and shows how that specific air affects one particular patient's breathing right now — and what "
@@ -383,7 +384,7 @@ app.index_string = """
 <!DOCTYPE html><html><head>{%metas%}<title>{%title%}</title>{%favicon%}{%css%}
 <style>
  body{background:#eef1f6;font-size:15px;color:#2c3e50;}
- .hero{background:linear-gradient(120deg,#0f2740,#17405f);color:#fff;padding:24px 28px;box-shadow:0 4px 18px rgba(0,0,0,.18);}
+ .hero{background:linear-gradient(120deg,#0f2740,#17405f);color:#fff;padding:24px 52px;box-shadow:0 4px 18px rgba(0,0,0,.18);}
  .hero-title{font-size:2.1rem;font-weight:800;}.hero-sub{color:#b7d0e6;font-size:1rem;}
  .hero-label{font-size:.75rem;color:#b7d0e6;text-transform:uppercase;letter-spacing:1px;margin-bottom:3px;}
  .airpill{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:12px 16px;}
@@ -394,11 +395,12 @@ app.index_string = """
  .sel-patient{position:absolute;left:14px;top:0;height:40px;line-height:40px;color:#1f2d3d;font-weight:600;
    font-size:1rem;pointer-events:none;z-index:5;white-space:nowrap;max-width:calc(100% - 44px);overflow:hidden;text-overflow:ellipsis;}
  /* nav tabs */
- .navwrap{background:#fff;border-bottom:1px solid #dfe4ec;box-shadow:0 2px 6px rgba(0,0,0,.05);padding:0 14px;}
+ .navwrap{background:#fff;border-bottom:1px solid #dfe4ec;box-shadow:0 2px 6px rgba(0,0,0,.05);padding:0 40px;}
  .tabs{border:none !important;} .tab{border:none !important;background:transparent !important;color:#55617a !important;
    font-weight:600 !important;font-size:1rem !important;padding:16px 22px !important;}
  .tab-sel{color:#17405f !important;border-bottom:3px solid #17405f !important;background:#fff !important;}
- .body{padding:22px 28px 30px;}
+ .body{padding:26px 52px 36px;}
+ .tabwrap{display:flex;flex-direction:column;gap:22px;}
  .status-hero{border-radius:14px;}
  .sh-cap{font-size:.78rem;letter-spacing:1px;font-weight:700;color:#55617a;}
  .sh-status{font-size:2.4rem;font-weight:800;line-height:1.1;}
@@ -429,7 +431,7 @@ app.index_string = """
  .about-p{font-size:1rem;line-height:1.65;color:#2c3e50;}
  .about-table{font-size:.95rem;}.about-table th{background:#f1f3f7;color:#1f2d3d;}
  .g-4>*{margin-top:1.25rem;}
- .site-footer{background:#0f2740;color:#b7d0e6;padding:28px;margin-top:30px;}
+ .site-footer{background:#0f2740;color:#b7d0e6;padding:28px 52px;margin-top:30px;}
  .ft-title{font-size:1.2rem;font-weight:800;color:#fff;margin-bottom:6px;}
  .ft-head{font-size:.8rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#8fb3d0;margin-bottom:8px;}
  .ft-text{font-size:.9rem;line-height:1.6;margin-bottom:4px;}
